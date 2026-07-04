@@ -30,7 +30,7 @@ spec:
           env:
             - name: BACKEND_URL
               # הורדנו את ה-api/ מהסוף כדי למנוע הכפלה בניתוב של הדפדפן
-              value: "http://127.0.0.1"
+              value: ""
 ---
 apiVersion: v1
 kind: Service

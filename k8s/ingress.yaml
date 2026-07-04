@@ -6,6 +6,7 @@ metadata:
     # מאפשר לפרונטאנד ולבקאנד לעבוד יחד ללא בעיות ניתוב
     nginx.ingress.kubernetes.io/ssl-redirect: "false"
 spec:
+  ingressClassName: nginx # <-- השורה הקריטית שמחברת את ה-Ingress ל-NGINX שהתקנת!
   rules:
     - http:
         paths:

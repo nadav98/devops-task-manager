@@ -4,7 +4,7 @@ pipeline {
     environment {
         AWS_ACCOUNT_ID = '678364258357'
         AWS_REGION     = 'us-east-1'
-        CLUSTER_NAME   = 'devops-eks-cluster' // <-- שנה לשם הקלאסטר שלך כשתקים את ה-EKS
+        CLUSTER_NAME   = 'devops-eks-cluster' 
         
         REGISTRY_URL   = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
         IMAGE_BACKEND  = "task-backend"
@@ -36,7 +36,7 @@ pipeline {
                     
                     # התקנת kubectl
                     if ! command -v kubectl &> /dev/null; then
-                        curl -LO "https://dl.k8s.io/release/\$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+                        curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
                         chmod +x kubectl
                         mv kubectl /usr/local/bin/
                     fi
@@ -56,7 +56,15 @@ pipeline {
 
         stage('AWS ECR Login') {
             steps {
-                sh "aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${REGISTRY_URL}"
+                // שימוש ב-Credentials המאובטחים שהגדרת בג'נקינס
+                withCredentials([[
+                    $class: 'AmazonWebServicesCredentialsBinding', 
+                    credentialsId: 'aws-credentials-id', 
+                    accessKeyVariable: 'AWS_ACCESS_KEY_ID', 
+                    secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
+                ]]) {
+                    sh "aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${REGISTRY_URL}"
+                }
             }
         }
 
@@ -81,21 +89,30 @@ pipeline {
         stage('Deploy to Kubernetes') {
             steps {
                 script {
-                    try {
-                        echo "Attempting to connect to EKS Cluster: ${CLUSTER_NAME}..."
-                        // עדכון ה-kubeconfig של ג'נקינס מול AWS
-                        sh "aws eks update-kubeconfig --region ${AWS_REGION} --name ${CLUSTER_NAME}"
-                        
-                        echo "Updating Kubernetes Cluster with version ${VERSION}..."
-                        sh "kubectl apply -f ./k8s/"
-                        sh "kubectl set image deployment/backend-deployment backend=${REGISTRY_URL}/${IMAGE_BACKEND}:${VERSION}"
-                        sh "kubectl set image deployment/frontend-deployment frontend=${REGISTRY_URL}/${IMAGE_FRONTEND}:${VERSION}"
-                    } catch (Exception e) {
-                        echo "--------------------------------------------------------"
-                        echo "WARNING: Could not deploy to EKS (${e.getMessage()})."
-                        echo "This is expected if EKS is not running yet or during local testing."
-                        echo "Images were successfully pushed to ECR. Skipping deployment stage."
-                        echo "--------------------------------------------------------"
+                    // שימוש ב-Credentials המאובטחים לצורך חיבור לקלאסטר ה-EKS
+                    withCredentials([[
+                        $class: 'AmazonWebServicesCredentialsBinding', 
+                        credentialsId: 'aws-credentials-id', 
+                        accessKeyVariable: 'AWS_ACCESS_KEY_ID', 
+                        secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
+                    ]]) {
+                        try {
+                            withEnv(["AWS_DEFAULT_REGION=${AWS_REGION}"]) {
+                                echo "Attempting to connect to EKS Cluster: ${CLUSTER_NAME}..."
+                                sh "aws eks update-kubeconfig --region ${AWS_REGION} --name ${CLUSTER_NAME}"
+                                
+                                echo "Updating Kubernetes Cluster with version ${VERSION}..."
+                                sh "kubectl apply -f ./k8s/"
+                                sh "kubectl set image deployment/backend-deployment backend=${REGISTRY_URL}/${IMAGE_BACKEND}:${VERSION}"
+                                sh "kubectl set image deployment/frontend-deployment frontend=${REGISTRY_URL}/${IMAGE_FRONTEND}:${VERSION}"
+                            }
+                        } catch (Exception e) {
+                            echo "--------------------------------------------------------"
+                            echo "WARNING: Could not deploy to EKS (${e.getMessage()})."
+                            echo "This is expected if EKS is not running yet or during local testing."
+                            echo "Images were successfully pushed to ECR. Skipping deployment stage."
+                            echo "--------------------------------------------------------"
+                        }
                     }
                 }
             }
