@@ -12,5 +12,5 @@
 ### 4. דחיפת ה-Images של ה-Backend וה-Frontend לתוך ה-ECR
 ![ECR Images Tagged](images/ecr-back-front.png)
 
-// האפליקציה עובדת
+// 5. האפליקציה עובדת
 ![Application Work](images/final-appwork.png)
